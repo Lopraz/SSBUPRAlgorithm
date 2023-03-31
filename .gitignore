@@ -3,3 +3,4 @@
 out
 target
 src/apikey.txt
+src/utils/ConnectionCredentials.java

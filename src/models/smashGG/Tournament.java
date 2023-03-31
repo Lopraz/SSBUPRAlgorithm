@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
+@JsonIgnoreProperties("tournament")
 public class Tournament {
 
     @JsonProperty("name")
@@ -31,19 +32,21 @@ public class Tournament {
 
     public List<PlayerDataInTournament> playersData;
 
+    public String type;
+
     public Tournament() {
         this.playersData = new ArrayList<>();
         this.sets = new ArrayList<>();
     }
 
-    public Tournament(String name, int tournamentID, int entrants, List<PlayerDataInTournament> playersData) {
+    public Tournament(String name, int tournamentID, int entrants, List<SetOfTournament> sets, List<PlayerDataInTournament> playersData, String type) {
         this.name = name;
         this.tournamentID = tournamentID;
         this.entrants = entrants;
+        this.sets = sets;
         this.playersData = playersData;
-        this.sets = new ArrayList<>();
+        this.type = type;
     }
-
 
     public String getName() {
         return name;
@@ -86,15 +89,23 @@ public class Tournament {
         this.sets = sets;
     }
 
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
     private void updatePlayersId(List<SetOfTournament> sets) {
-        HashMap<Integer,Integer> tournamentPlayerIDAndPlayerIDPairs = getTournamentPlayerIDAndPlayerIDPairs();
-        for(SetOfTournament set : sets){
+        HashMap<Integer, Integer> tournamentPlayerIDAndPlayerIDPairs = getTournamentPlayerIDAndPlayerIDPairs();
+        for (SetOfTournament set : sets) {
             set.updateIDs(tournamentPlayerIDAndPlayerIDPairs);
         }
     }
 
-    private HashMap<Integer,Integer> getTournamentPlayerIDAndPlayerIDPairs(){
-        return (HashMap<Integer, Integer>) this.getPlayersData().stream().collect(Collectors.toMap(PlayerDataInTournament::getPlayerIDInTournament,PlayerDataInTournament::getPlayerID));
+    private HashMap<Integer, Integer> getTournamentPlayerIDAndPlayerIDPairs() {
+        return (HashMap<Integer, Integer>) this.getPlayersData().stream().collect(Collectors.toMap(PlayerDataInTournament::getPlayerIDInTournament, PlayerDataInTournament::getPlayerID));
     }
 
     @JsonProperty("entrants")
@@ -116,6 +127,7 @@ public class Tournament {
                 ", tournamentID=" + tournamentID +
                 ", entrants=" + entrants +
                 ", playersData=" + playersData +
+                ", type=" + type +
                 '}';
     }
 }

@@ -17,6 +17,7 @@ public class PlayerDataInTournament {
     public int playerIDInTournament;
     public int placing;
     public String isDisqualified;
+    public int region;
 
     public PlayerDataInTournament() {
     }
@@ -69,6 +70,14 @@ public class PlayerDataInTournament {
         this.isDisqualified = isDisqualified;
     }
 
+    public int getRegion() {
+        return region;
+    }
+
+    public void setRegion(int region) {
+        this.region = region;
+    }
+
     @JsonProperty("standing")
     public void setPlacing(Map<String, String> standing) {
         this.placing = Integer.parseInt(standing.get("placement"));
@@ -76,7 +85,7 @@ public class PlayerDataInTournament {
 
     @JsonProperty("participants")
     public void setParticipantsInfo(ArrayNode participants) {
-        String id = participants.get(0).get("user") == null || participants.get(0).get("user").toString().equals("null") ? "0" : participants.get(0).get("user").get("id").toString() ;
+        String id = participants.get(0).get("user") == null || participants.get(0).get("user").toString().equals("null") ? "0" : participants.get(0).get("user").get("player").get("id").toString() ;
         this.name = participants.get(0).get("gamerTag").asText();
         this.playerID = Integer.parseInt(id);
     }

@@ -6,6 +6,12 @@ public class Queries {
             "    id\n" +
             "    numEntrants\n" +
             "    name\n" +
+            "    tournament{\n" +
+            "       city\n" +
+            "       name\n" +
+            "       startAt\n" +
+            "       endAt\n" +
+            "    }\n"+
             "    entrants(query: {\n" +
             "      page: $page\n" +
             "      perPage: $perPage\n" +
@@ -22,7 +28,9 @@ public class Queries {
             "        }\n" +
             "        participants {\n" +
             "          user {\n" +
-            "            id\n" +
+            "           player{\n" +
+            "               id\n" +
+            "           }\n" +
             "          }\n" +
             "          gamerTag\n" +
             "        }\n" +
@@ -63,7 +71,7 @@ public class Queries {
         return "{\n" +
                 "  \"slug\": \"" + slug + "\",\n" +
                 "  \"page\": 1,\n" +
-                "  \"perPage\": 96\n" +
+                "  \"perPage\": 128\n" +
                 "}";
     }
 
@@ -71,7 +79,7 @@ public class Queries {
         return "{\n" +
                 "  \"slug\": \"" + slug + "\",\n" +
                 "  \"page\": 1,\n" +
-                "  \"perPage\": 203\n" +
+                "  \"perPage\": 249\n" +
                 "}";
     }
 }
