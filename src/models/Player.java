@@ -342,10 +342,10 @@ public class Player {
             regional = regional / getRegionalCount();
 
         if (getNationalCount() > 0)
-            national = national / getNationalCount();
+            national = national * getNationalCount() / Constants.NATIONAL_COUNT;
 
         if (getMajorCount() > 0)
-            major = major / getMajorCount();
+            major = major * getMajorCount() / Constants.MAJOR_COUNT;
 
         if (getLocalCount() != 0 && getRegionalCount() != 0 && getNationalCount() != 0 && getMajorCount() != 0) {
             setConsistencyScoreLocal(getConsistencyScoreLocal() + local * Constants.LOCALS_ENHANCED_FACTOR);
@@ -502,6 +502,8 @@ public class Player {
 
         if (player.getMajorCount() > 0)
             player.setConsistencyScoreMajor(player.getConsistencyScoreMajor() / player.getMajorCount());
+
+        float playerConsistencyAll = 0f, playerConsistencyRegionalPlus = 0f;
         if (player.getRegion() > 13 && player.getRegion() != 35 && player.getRegion() != 36) {
             if (player.getNationalCount() > 0 && player.getMajorCount() > 0) {
                 player.setConsistencyScoreGlobal(player.getConsistencyScoreNational() * 2.25f + player.getConsistencyScoreMajor() * 3f);
@@ -510,10 +512,12 @@ public class Player {
             } else {
                 player.setConsistencyScoreGlobal(player.getConsistencyScoreNational() * 4f);
             }
-        } else if (player.getLocalCount() == 0 || player.getRegionalCount() == 0 || player.getNationalCount() == 0 || player.getMajorCount() == 0) {
-            player.setConsistencyScoreGlobal(player.getConsistencyScoreLocal() * Constants.LOCALS_ENHANCED_FACTOR + player.getConsistencyScoreRegional() * Constants.REGIONALS_ENHANCED_FACTOR + player.getConsistencyScoreNational() * Constants.NATIONALS_ENHANCED_FACTOR + player.getConsistencyScoreMajor() * Constants.MAJORS_ENHANCED_FACTOR);
         } else {
-            player.setConsistencyScoreGlobal(player.getConsistencyScoreLocal() * Constants.LOCALS_FACTOR + player.getConsistencyScoreRegional() * Constants.REGIONALS_FACTOR + player.getConsistencyScoreNational() * Constants.NATIONALS_FACTOR + player.getConsistencyScoreMajor() * Constants.MAJORS_FACTOR);
+            playerConsistencyRegionalPlus = player.getConsistencyScoreRegional() * Constants.REGIONALS_ENHANCED_FACTOR + player.getConsistencyScoreNational() * Constants.NATIONALS_ENHANCED_FACTOR + player.getConsistencyScoreMajor() * Constants.MAJORS_ENHANCED_FACTOR;
+
+            playerConsistencyAll = player.getConsistencyScoreLocal() * Constants.LOCALS_FACTOR + player.getConsistencyScoreRegional() * Constants.REGIONALS_FACTOR + player.getConsistencyScoreNational() * Constants.NATIONALS_FACTOR + player.getConsistencyScoreMajor() * Constants.MAJORS_FACTOR;
+
+            player.setConsistencyScoreGlobal(Math.max(playerConsistencyAll, playerConsistencyRegionalPlus) * 0.6f + Math.min(playerConsistencyAll, playerConsistencyRegionalPlus) * 0.4f);
         }
 
     }
@@ -539,13 +543,14 @@ public class Player {
             List<SetOfTournament> setsOfTournament = this.getSetsByTournament().get(tournamentKey);
             if (tournamentTypeMap.get(tournamentKey).equals("major")) {
                 for (SetOfTournament set : setsOfTournament) {
+
+                    int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
+                    // We dont want to use DQs
+                    if (!playersPlacements.containsKey(opponentID))
+                        continue;
                     // current player won the set
                     if (set.getWinnerId() == this.getPlayerID()) {
 
-                        int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
-                        // We dont want to use DQs
-                        if (!playersPlacements.containsKey(opponentID))
-                            continue;
                         // max value = 125
                         upsetFactorOnTournamentType = majorConsistencyByPlayer.get(opponentID) * 1.5f;
                         // max value = 525
@@ -580,13 +585,14 @@ public class Player {
                 }
             } else if (tournamentTypeMap.get(tournamentKey).equals("national")) {
                 for (SetOfTournament set : setsOfTournament) {
+
+                    int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
+                    // We dont want to use DQs
+                    if (!playersPlacements.containsKey(opponentID))
+                        continue;
                     // current player won the set
                     if (set.getWinnerId() == this.getPlayerID()) {
 
-                        int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
-                        // We dont want to use DQs
-                        if (!playersPlacements.containsKey(opponentID))
-                            continue;
                         // max value = 100
                         upsetFactorOnTournamentType = nationalConsistencyByPlayer.get(opponentID) * 0.75f;
                         // max value = 525
@@ -622,13 +628,13 @@ public class Player {
                 }
             } else if (tournamentTypeMap.get(tournamentKey).equals("regional")) {
                 for (SetOfTournament set : setsOfTournament) {
+
+                    int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
+                    // We dont want to use DQs
+                    if (!playersPlacements.containsKey(opponentID))
+                        continue;
                     // current player won the set
                     if (set.getWinnerId() == this.getPlayerID()) {
-
-                        int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
-                        // We dont want to use DQs
-                        if (!playersPlacements.containsKey(opponentID))
-                            continue;
                         // max value = 100
                         upsetFactorOnTournamentType = regionalConsistencyByPlayer.get(opponentID) * 1.10f;
                         // max value = 525
@@ -664,12 +670,14 @@ public class Player {
                 }
             } else if (tournamentTypeMap.get(tournamentKey).equals("local")) {
                 for (SetOfTournament set : setsOfTournament) {
+
+                    int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
+                    // We dont want to use DQs
+                    if (!playersPlacements.containsKey(opponentID))
+                        continue;
                     // current player won the set
                     if (set.getWinnerId() == this.getPlayerID()) {
-                        int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
-                        // We dont want to use DQs
-                        if (!playersPlacements.containsKey(opponentID))
-                            continue;
+
                         // max value = 100
                         upsetFactorOnTournamentType = localConsistencyByPlayer.get(opponentID);
                         // max value = 525
@@ -751,11 +759,19 @@ public class Player {
         players.forEach(p -> p.setFinalRankingScore(p.getConsistencyScoreGlobalWithStackedFactor() * Constants.CONSISTENCY_COEFFICIENT + p.getWinLossImpactScore() * Constants.WIN_LOSS_IMPACT_COEFFICIENT));
         players.sort((o1, o2) -> Float.compare(o1.getFinalRankingScore(), o2.getFinalRankingScore()));
         Collections.reverse(players);
-        List<Player> top100 = players.stream().filter(p -> p.getRegion() < 14 && ((p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 8 && (p.getMajorCount() + p.getNationalCount() >= 2)) || p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 12)).limit(100).collect(Collectors.toList());
+        List<Player> top100 = players.stream().filter(p -> ((p.getRegion() < 14 || p.getRegion() == 35 || p.getRegion() == 36) && p.getTournaments().size() >= 4 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1) || (p.getRegion() > 13 && p.getRegion() != 35 && p.getRegion() != 36 && p.getTournaments().size() >= 6 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1)).limit(200).collect(Collectors.toList());
+
 
         int i = 1;
+        int j = 1;
+        System.out.println("placing;name;local;regional;national;major;global;globalwithstackedfactor;winlossimpactscorelocalsandregionals;winlossimpactscorenationalsandmajors;winlossimpactscoreglobal;finalscore");
         for (Player player : top100) {
-            System.out.println(i++ + " : " + player.getName() + " : " + player.getFinalRankingScore());
+            // System.out.println(i++ + " : " + player.getName() + " : " + player.getFinalRankingScore());
+            if (player.getRegion() > 13 && player.getRegion() != 35 && player.getRegion() != 36)
+                System.out.println(i - 0.5f + ";" + player.toCSV());
+            else
+                System.out.println(i++ + ";" + player.toCSV());
+            j++;
         }
 
     }
@@ -808,5 +824,10 @@ public class Player {
                 ", winLossImpactScore=" + winLossImpactScore +
                 ", finalRankingScore=" + finalRankingScore +
                 "}\n";
+    }
+
+    public String toCSV() {
+        return name + ";" + consistencyScoreLocal + ";" + consistencyScoreRegional + ";" + consistencyScoreNational + ";" + consistencyScoreMajor + ";" + consistencyScoreGlobal + ";" + consistencyScoreGlobalWithStackedFactor + ";" + winLossImpactScoreRegionalsAndLocals + ";" + winLossImpactScoreNationalsAndMajors + ";" + winLossImpactScore + ";" + finalRankingScore;
+
     }
 }

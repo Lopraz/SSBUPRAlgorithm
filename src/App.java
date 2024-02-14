@@ -18,6 +18,7 @@ import java.sql.*;
 import java.sql.Connection;
 import java.sql.Date;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class App {
     public static List<Tournament> tournaments = new ArrayList<>();
@@ -25,7 +26,7 @@ public class App {
 
     public static void main(String[] args) throws IOException {
 
-        generatePRFromDatabaseUsingPeriod(Date.valueOf("2022-01-01"), Date.valueOf("2022-12-31"));
+        generatePRFromDatabaseUsingPeriod(Date.valueOf("2023-01-01"), Date.valueOf("2024-02-01"));
         //generatePRFromTournamentSlugs(Constants.SEASON_2022);
     }
 
@@ -80,8 +81,9 @@ public class App {
                 e.printStackTrace();
             }
         }
+
         Player.calculateConsistencyScoresForAll(players, tournaments);
-        Player.calculateWinLossScore(players,tournaments);
+        Player.calculateWinLossScore(players, tournaments);
         Player.calculateAndDisplayFinalResults(players);
 
     }
@@ -110,7 +112,6 @@ public class App {
             for (Tournament tournament : tournaments) {
 
 
-
                 //retrieve all sets from said tournament
                 String setQuery = "Select S.id as set_id, winner, p1_id, p2_id, T.id as tournament_id FROM public.sets S LEFT join tournaments T on T.tournament_slug = S.tournament_name and T.event_slug = S.tournament_event where T.id = ? and S.p1_score<>-1 and S.p2_score<>-1 order by S.id asc";
 
@@ -137,7 +138,7 @@ public class App {
                     PlayerDataInTournament playerDataInTournament = new PlayerDataInTournament();
                     playerDataInTournament.setPlayerID(resultSet.getInt("player_id"));
                     playerDataInTournament.setName(resultSet.getString("ign"));
-                    playerDataInTournament.setPlacing(calculatePlacing(resultSet.getInt(4),tournament.getEntrants()));
+                    playerDataInTournament.setPlacing(calculatePlacing(resultSet.getInt(4), tournament.getEntrants()));
                     playerDataInTournament.setIsDisqualified(resultSet.getInt(5) == 1 ? "true" : "false");
                     playerDataInTournament.setRegion(resultSet.getInt("main_region"));
                     tournament.getPlayersData().add(playerDataInTournament);
@@ -150,8 +151,10 @@ public class App {
             e.printStackTrace();
         }
 
+        Constants.MAJOR_COUNT = (int) tournaments.stream().filter(t -> t.getType().equals("major")).count();
+        Constants.NATIONAL_COUNT = (int) tournaments.stream().filter(t -> t.getType().equals("national")).count();
         Player.calculateConsistencyScoresForAll(players, tournaments);
-        Player.calculateWinLossScore(players,tournaments);
+        Player.calculateWinLossScore(players, tournaments);
         Player.calculateAndDisplayFinalResults(players);
     }
 
@@ -174,11 +177,11 @@ public class App {
 
     }
 
-    private static int calculatePlacing(int placing, int entrants){
+    private static int calculatePlacing(int placing, int entrants) {
 
-        int dividend = calculateNbOfPlacings(entrants)+1-calculateNbOfPlacings(placing);
+        int dividend = calculateNbOfPlacings(entrants) + 1 - calculateNbOfPlacings(placing);
         float divisor = calculateNbOfPlacings(entrants) * 1f;
-        return  Math.round((dividend/divisor)*100);
+        return Math.round((dividend / divisor) * 100);
     }
 
 

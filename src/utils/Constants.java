@@ -20,6 +20,8 @@ public class Constants {
     public static float WIN_LOSS_IMPACT_SCORE = 2.9f;
     public static float CONSISTENCY_COEFFICIENT = 1f;
     public static float WIN_LOSS_IMPACT_COEFFICIENT = 1f;
+    public static int MAJOR_COUNT;
+    public static int NATIONAL_COUNT;
 
 
 }
