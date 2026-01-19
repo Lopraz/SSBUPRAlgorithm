@@ -18,6 +18,7 @@ import java.sql.*;
 import java.sql.Connection;
 import java.sql.Date;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 public class App {
@@ -26,7 +27,9 @@ public class App {
 
     public static void main(String[] args) throws IOException {
 
-        generatePRFromDatabaseUsingPeriod(Date.valueOf("2023-01-01"), Date.valueOf("2024-02-01"));
+        //generatePRFromDatabaseUsingPeriod(Date.valueOf("2023-07-01"), Date.valueOf("2024-02-01"));
+        generatePRFromDatabaseUsingPeriod(Date.valueOf("2024-02-01"), Date.valueOf("2024-07-31"));
+        //generatePRFromDatabaseUsingPeriod(Date.valueOf("2024-08-01"), Date.valueOf("2025-01-31"));
         //generatePRFromTournamentSlugs(Constants.SEASON_2022);
     }
 
@@ -82,6 +85,7 @@ public class App {
             }
         }
 
+
         Player.calculateConsistencyScoresForAll(players, tournaments);
         Player.calculateWinLossScore(players, tournaments);
         Player.calculateAndDisplayFinalResults(players);
@@ -90,9 +94,12 @@ public class App {
 
     // Format date like this : YYYY-mm-dd
     public static void generatePRFromDatabaseUsingPeriod(Date start, Date end) {
-
+        long time = System.currentTimeMillis();
+        long timeQueryTournaments = 0, timeQueryAllData = 0;
 
         try (Connection connection = DriverManager.getConnection(ConnectionCredentials.JDBC_URL, ConnectionCredentials.DB_USER, ConnectionCredentials.DB_PASSWORD)) {
+
+
             String tournamentQuery = "SELECT tournament_name, id, entrants, type FROM public.tournaments where start_date>=? and start_date<=? and type <> 'ladder' order by id asc ;";
 
             PreparedStatement preparedStatement = connection.prepareStatement(tournamentQuery);
@@ -104,10 +111,11 @@ public class App {
                 tournament.setTournamentID(resultSet.getInt("id"));
                 tournament.setEntrants(resultSet.getInt("entrants"));
                 tournament.setName(resultSet.getString("tournament_name"));
-                tournament.setType(resultSet.getString("type"));
+                tournament.setType((tournament.getName().equals("GSM")) ? "major" : resultSet.getString("type"));
                 tournaments.add(tournament);
             }
 
+            timeQueryTournaments = System.currentTimeMillis();
 
             for (Tournament tournament : tournaments) {
 
@@ -146,6 +154,7 @@ public class App {
                 Player.setOrUpdatePlayersList(players, tournament);
             }
 
+            timeQueryAllData = System.currentTimeMillis();
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -153,9 +162,27 @@ public class App {
 
         Constants.MAJOR_COUNT = (int) tournaments.stream().filter(t -> t.getType().equals("major")).count();
         Constants.NATIONAL_COUNT = (int) tournaments.stream().filter(t -> t.getType().equals("national")).count();
+
+        System.out.println("Total tournaments :" + tournaments.size());
+        System.out.println("Major tournaments :" + tournaments.stream().filter(t -> t.getType().equals("major")).count());
+        System.out.println("National tournaments :" + tournaments.stream().filter(t -> t.getType().equals("national")).count());
+        System.out.println("Regional tournaments :" + tournaments.stream().filter(t -> t.getType().equals("regional")).count());
+        System.out.println("Local tournaments :" + tournaments.stream().filter(t -> t.getType().equals("local")).count());
         Player.calculateConsistencyScoresForAll(players, tournaments);
+        long timeQueryConsitency = System.currentTimeMillis();
         Player.calculateWinLossScore(players, tournaments);
+        long timeQueryWinLoss = System.currentTimeMillis();
         Player.calculateAndDisplayFinalResults(players);
+        long timeQueryResults = System.currentTimeMillis();
+
+        System.out.println(
+                "Query Tournaments = " + TimeUnit.MILLISECONDS.toMinutes(timeQueryTournaments - time) +":"+ TimeUnit.MILLISECONDS.toSeconds(timeQueryTournaments - time) % 60 + "\n" +
+                        "Query all data = " + TimeUnit.MILLISECONDS.toMinutes(timeQueryAllData - time) +":"+ TimeUnit.MILLISECONDS.toSeconds(timeQueryAllData- time) % 60 + "\n" +
+                        "Consistency Score = " + TimeUnit.MILLISECONDS.toMinutes(timeQueryConsitency - time) +":"+ TimeUnit.MILLISECONDS.toSeconds(timeQueryConsitency - time) % 60 + "\n" +
+                        "Win Loss = " + TimeUnit.MILLISECONDS.toMinutes(timeQueryWinLoss - time) +":"+ TimeUnit.MILLISECONDS.toSeconds(timeQueryWinLoss - time) % 60 + "\n" +
+                        "Results = " + TimeUnit.MILLISECONDS.toMinutes(timeQueryResults - time) +":"+ TimeUnit.MILLISECONDS.toSeconds(timeQueryResults - time) % 60 + "\n"
+
+        );
     }
 
     private static int calculateNbOfPlacings(int entrants) {

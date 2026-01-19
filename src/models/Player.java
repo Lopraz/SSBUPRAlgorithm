@@ -7,6 +7,7 @@ import utils.Constants;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class Player {
 
@@ -28,6 +29,8 @@ public class Player {
     private HashMap<Integer, List<SetOfTournament>> setsByTournament;
 
     private int majorCount = 0, nationalCount = 0, regionalCount = 0, localCount = 0;
+
+    private boolean hiddenBoss = false, countLocals = true;
 
     public Player() {
         this.tournaments = new ArrayList<>();
@@ -216,6 +219,14 @@ public class Player {
         this.localCount = localCount;
     }
 
+    public boolean isCountLocals() {
+        return countLocals;
+    }
+
+    public void setCountLocals(boolean countLocals) {
+        this.countLocals = countLocals;
+    }
+
     public static void setOrUpdatePlayersList(List<Player> players, Tournament tournament) {
         for (PlayerDataInTournament playerData : tournament.getPlayersData()) {
             // We do not import DQ'd players
@@ -246,12 +257,26 @@ public class Player {
     public static void calculateConsistencyScoresForAll(List<Player> players, List<Tournament> tournaments) {
         players.forEach(Player::calculateConsistencyScoresAndRankListForOne);
         Map<Integer, Float> tournamentTiering = generateTournamentTiering(players, tournaments);
+        Map<Integer, Tournament> national = tournaments.stream().filter(tournament -> tournament.getType().equals("national")).collect(Collectors.toMap(Tournament::getTournamentID, tournament -> tournament));
+        System.out.println("STACKED FACTOR NATIONAL");
+        tournamentTiering.forEach((key, value) -> {
+            if (national.containsKey(key))
+                System.out.println(national.get(key).getName() + ":" + value);
+        });
         for (Player player : players) {
-            if (player.getRegion() > 13 && player.getRegion() != 35 && player.getRegion() != 36)
+            if (isForeigner(player.getRegion()))
                 player.updateConsistencyScoresForOneForeigner(tournamentTiering, players);
             else
                 player.updateConsistencyScoresForOneFrench(tournamentTiering);
         }
+    }
+
+    private static boolean isForeigner(Integer region) {
+        return region > 13 && region != 35 && region != 36;
+    }
+
+    private static boolean isNationalPlusAttender(Player player) {
+        return (player.getLocalCount() + player.getRegionalCount() == 0 && player.getNationalCount() + player.getMajorCount() > 0);
     }
 
     private void updateConsistencyScoresForOneForeigner(Map<Integer, Float> tournamentTiering, List<Player> players) {
@@ -313,6 +338,7 @@ public class Player {
 
     private void updateConsistencyScoresForOneFrench(Map<Integer, Float> tournamentTiering) {
         float local = 0, regional = 0, national = 0, major = 0;
+        int hiddenBoss = 0;
         for (Tournament tournament : getTournaments()) {
             float stackedIndicator = tournamentTiering.get(tournament.getTournamentID());
             switch (tournament.getType()) {
@@ -337,28 +363,39 @@ public class Player {
 
         if (getLocalCount() > 0)
             local = local / getLocalCount();
+        else
+            hiddenBoss++;
 
         if (getRegionalCount() > 0)
             regional = regional / getRegionalCount();
+        else
+            hiddenBoss++;
 
         if (getNationalCount() > 0)
             national = national * getNationalCount() / Constants.NATIONAL_COUNT;
+        else
+            hiddenBoss++;
 
         if (getMajorCount() > 0)
             major = major * getMajorCount() / Constants.MAJOR_COUNT;
+        else
+            hiddenBoss++;
+
+        if (hiddenBoss >= 2)
+            setHiddenBoss(true);
 
         if (getLocalCount() != 0 && getRegionalCount() != 0 && getNationalCount() != 0 && getMajorCount() != 0) {
             setConsistencyScoreLocal(getConsistencyScoreLocal() + local * Constants.LOCALS_ENHANCED_FACTOR);
             setConsistencyScoreRegional(getConsistencyScoreRegional() + regional * Constants.REGIONALS_ENHANCED_FACTOR);
             setConsistencyScoreNational(getConsistencyScoreNational() + national * Constants.REGIONALS_ENHANCED_FACTOR);
             setConsistencyScoreMajor(getConsistencyScoreMajor() + major * Constants.REGIONALS_ENHANCED_FACTOR);
-            setConsistencyScoreGlobalWithStackedFactor(getConsistencyScoreGlobal() + local * Constants.LOCALS_ENHANCED_FACTOR + regional * Constants.REGIONALS_ENHANCED_FACTOR + national * Constants.NATIONALS_ENHANCED_FACTOR + major * Constants.MAJORS_ENHANCED_FACTOR);
+            setConsistencyScoreGlobalWithStackedFactor(getConsistencyScoreGlobal() + (isCountLocals() ? local : 0) * Constants.LOCALS_ENHANCED_FACTOR + regional * Constants.REGIONALS_ENHANCED_FACTOR + national * Constants.NATIONALS_ENHANCED_FACTOR + major * Constants.MAJORS_ENHANCED_FACTOR);
         } else {
             setConsistencyScoreLocal(getConsistencyScoreLocal() + local * Constants.LOCALS_FACTOR);
             setConsistencyScoreRegional(getConsistencyScoreRegional() + regional * Constants.REGIONALS_FACTOR);
             setConsistencyScoreNational(getConsistencyScoreNational() + national * Constants.REGIONALS_FACTOR);
             setConsistencyScoreMajor(getConsistencyScoreMajor() + major * Constants.REGIONALS_FACTOR);
-            setConsistencyScoreGlobalWithStackedFactor(getConsistencyScoreGlobal() + local * Constants.LOCALS_FACTOR + regional * Constants.REGIONALS_FACTOR + national * Constants.NATIONALS_FACTOR + major * Constants.MAJORS_FACTOR);
+            setConsistencyScoreGlobalWithStackedFactor(getConsistencyScoreGlobal() + (isCountLocals() ? local : 0) * Constants.LOCALS_FACTOR + regional * Constants.REGIONALS_FACTOR + national * Constants.NATIONALS_FACTOR + major * Constants.MAJORS_FACTOR);
         }
 
     }
@@ -449,12 +486,13 @@ public class Player {
                     break;
                 }
                 case "major": {
-                    tournamentTiering.put(tournament.getTournamentID(), Math.max(0f, tournamentTiering.get(tournament.getTournamentID()) - (float) majorAttendancePlayerCountPair[0] / (int) majorAttendancePlayerCountPair[1]));
+                    tournamentTiering.put(tournament.getTournamentID(), Math.max(0f, Math.min(1, tournament.getEntrants() / 400) * (tournamentTiering.get(tournament.getTournamentID()) - (float) majorAttendancePlayerCountPair[0] / (int) majorAttendancePlayerCountPair[1])));
                     break;
                 }
             }
 
         }
+
         return tournamentTiering;
     }
 
@@ -496,6 +534,9 @@ public class Player {
 
         if (player.getRegionalCount() > 0)
             player.setConsistencyScoreRegional(player.getConsistencyScoreRegional() / player.getRegionalCount());
+        else {
+            player.setConsistencyScoreRegional(player.getConsistencyScoreLocal() * 0.75f);
+        }
 
         if (player.getNationalCount() > 0)
             player.setConsistencyScoreNational(player.getConsistencyScoreNational() / player.getNationalCount());
@@ -503,8 +544,8 @@ public class Player {
         if (player.getMajorCount() > 0)
             player.setConsistencyScoreMajor(player.getConsistencyScoreMajor() / player.getMajorCount());
 
-        float playerConsistencyAll = 0f, playerConsistencyRegionalPlus = 0f;
-        if (player.getRegion() > 13 && player.getRegion() != 35 && player.getRegion() != 36) {
+        float playerConsistencyAll = 0f, playerConsistencyRegionalPlus = 0f, playerConsistencyNoNational = 0f, playerConsistencyNoMajor = 0f;
+        if (isForeigner(player.getRegion()) || isNationalPlusAttender(player)) {
             if (player.getNationalCount() > 0 && player.getMajorCount() > 0) {
                 player.setConsistencyScoreGlobal(player.getConsistencyScoreNational() * 2.25f + player.getConsistencyScoreMajor() * 3f);
             } else if (player.getMajorCount() > 0) {
@@ -517,10 +558,18 @@ public class Player {
 
             playerConsistencyAll = player.getConsistencyScoreLocal() * Constants.LOCALS_FACTOR + player.getConsistencyScoreRegional() * Constants.REGIONALS_FACTOR + player.getConsistencyScoreNational() * Constants.NATIONALS_FACTOR + player.getConsistencyScoreMajor() * Constants.MAJORS_FACTOR;
 
-            player.setConsistencyScoreGlobal(Math.max(playerConsistencyAll, playerConsistencyRegionalPlus) * 0.6f + Math.min(playerConsistencyAll, playerConsistencyRegionalPlus) * 0.4f);
+            if (Math.max(playerConsistencyAll, playerConsistencyRegionalPlus) == playerConsistencyRegionalPlus)
+                player.setCountLocals(false);
+
+            playerConsistencyNoNational = player.getConsistencyScoreLocal() * Constants.LOCALS_FACTOR + player.getConsistencyScoreRegional() * Constants.REGIONALS_FACTOR + player.getConsistencyScoreMajor() * 3f;
+            playerConsistencyNoMajor = player.getConsistencyScoreLocal() * Constants.LOCALS_FACTOR + player.getConsistencyScoreRegional() * Constants.REGIONALS_FACTOR + player.getConsistencyScoreNational() * 2.5f;
+            playerConsistencyAll = Math.max(playerConsistencyAll, playerConsistencyNoNational);
+            playerConsistencyAll = Math.max(playerConsistencyAll, playerConsistencyNoMajor);
+            player.setConsistencyScoreGlobal(Math.max(playerConsistencyAll, playerConsistencyRegionalPlus));
         }
 
     }
+
 
     public static void calculateWinLossScore(List<Player> players, List<Tournament> tournaments) {
         players.forEach(p -> p.calculateWinLossScoreForOne(players, tournaments));
@@ -532,7 +581,11 @@ public class Player {
         HashMap<Integer, Float> regionalConsistencyByPlayer = getRegionalConsistencyMap(players);
         HashMap<Integer, Float> localConsistencyByPlayer = getLocalConsistencyMap(players);
         HashMap<Integer, Float> globalConsistencyByPlayer = getGlobalConsistencyMap(players);
+        HashMap<Integer, Integer> playersRegion = getPlayerRegionMap(players);
+        HashMap<Integer, Boolean> hiddenBossMap = getHiddenBossMap(players);
         HashMap<Integer, String> tournamentTypeMap = getTournamentTypeMap(tournaments);
+        HashMap<Integer, Float> tournamentPlacingScore = new HashMap<>();
+
 
         for (Integer tournamentKey : this.getSetsByTournament().keySet()) {
             // only the two best wins and two worst losses are accounted for
@@ -552,23 +605,23 @@ public class Player {
                     if (set.getWinnerId() == this.getPlayerID()) {
 
                         // max value = 125
-                        upsetFactorOnTournamentType = majorConsistencyByPlayer.get(opponentID) * 1.5f;
+                        upsetFactorOnTournamentType = majorConsistencyByPlayer.get(opponentID) * 1.25f;
                         // max value = 525
                         upsetFactorOnGlobalConsistencyPerformance = globalConsistencyByPlayer.get(opponentID);
                         // max value = 125
-                        upsetFactorOnTournamentPerformance = playersPlacements.get(opponentID) * 1.5f;
+                        upsetFactorOnTournamentPerformance = playersPlacements.get(opponentID) * 1.25f;
 
                         calculatedValue = (upsetFactorOnTournamentType + upsetFactorOnGlobalConsistencyPerformance + upsetFactorOnTournamentPerformance) / Constants.WIN_LOSS_IMPACT_SCORE;
                         updateValues(maxValue, calculatedValue, 0);
                     } // current player lost the set
                     else {
                         // max value = 100, min value = 7
-                        if (regionalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreMajor())
-                            upsetFactorOnTournamentType = this.getConsistencyScoreRegional() - regionalConsistencyByPlayer.get(set.getWinnerId());
+                        if (majorConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreMajor())
+                            upsetFactorOnTournamentType = this.getConsistencyScoreMajor() - majorConsistencyByPlayer.get(set.getWinnerId());
                         else
                             upsetFactorOnTournamentType = 0;
                         // max value = 525, min value = 12.25
-                        if (globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor())
+                        if (!hiddenBossMap.get(opponentID) && !isForeigner(playersRegion.get(opponentID)) && globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor() * 0.8)
                             upsetFactorOnGlobalConsistencyPerformance = this.getConsistencyScoreGlobalWithStackedFactor() - globalConsistencyByPlayer.get(set.getWinnerId());
                         else
                             upsetFactorOnGlobalConsistencyPerformance = 0;
@@ -594,11 +647,11 @@ public class Player {
                     if (set.getWinnerId() == this.getPlayerID()) {
 
                         // max value = 100
-                        upsetFactorOnTournamentType = nationalConsistencyByPlayer.get(opponentID) * 0.75f;
+                        upsetFactorOnTournamentType = nationalConsistencyByPlayer.get(opponentID) * 1f;
                         // max value = 525
                         upsetFactorOnGlobalConsistencyPerformance = globalConsistencyByPlayer.get(opponentID);
-                        // max value = 100
-                        upsetFactorOnTournamentPerformance = playersPlacements.get(opponentID) * 0.75f;
+                        // max value = 100)
+                        upsetFactorOnTournamentPerformance = playersPlacements.get(opponentID) * 1f;
                         // max value = roughly 250; first place is guaranteed to get full points
 
                         calculatedValue = (upsetFactorOnTournamentType + upsetFactorOnGlobalConsistencyPerformance + upsetFactorOnTournamentPerformance) / Constants.WIN_LOSS_IMPACT_SCORE;
@@ -606,12 +659,12 @@ public class Player {
                     } // current player lost the set
                     else {
                         // max value = 100, min value = 7
-                        if (regionalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreNational())
+                        if (nationalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreNational())
                             upsetFactorOnTournamentType = this.getConsistencyScoreNational() - nationalConsistencyByPlayer.get(set.getWinnerId());
                         else
                             upsetFactorOnTournamentType = 0;
                         // max value = 525, min value = 12.25
-                        if (globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor())
+                        if (!hiddenBossMap.get(opponentID) && !isForeigner(playersRegion.get(opponentID)) && globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor() * 0.8)
                             upsetFactorOnGlobalConsistencyPerformance = this.getConsistencyScoreGlobalWithStackedFactor() - globalConsistencyByPlayer.get(set.getWinnerId());
                         else
                             upsetFactorOnGlobalConsistencyPerformance = 0;
@@ -653,7 +706,7 @@ public class Player {
                         else
                             upsetFactorOnTournamentType = 0;
                         // max value = 525, min value = 12.25
-                        if (globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor())
+                        if (!hiddenBossMap.get(opponentID) && !isForeigner(playersRegion.get(opponentID)) && globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor() * 0.8)
                             upsetFactorOnGlobalConsistencyPerformance = this.getConsistencyScoreGlobalWithStackedFactor() - globalConsistencyByPlayer.get(set.getWinnerId());
                         else
                             upsetFactorOnGlobalConsistencyPerformance = 0;
@@ -668,7 +721,7 @@ public class Player {
                     }
 
                 }
-            } else if (tournamentTypeMap.get(tournamentKey).equals("local")) {
+            } else if (tournamentTypeMap.get(tournamentKey).equals("local") && this.isCountLocals()) {
                 for (SetOfTournament set : setsOfTournament) {
 
                     int opponentID = set.getPlayer1() == this.getPlayerID() ? set.getPlayer2() : set.getPlayer1();
@@ -696,7 +749,7 @@ public class Player {
                         else
                             upsetFactorOnTournamentType = 0;
                         // max value = 525, min value = 12.25
-                        if (globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor())
+                        if (!hiddenBossMap.get(opponentID) && !isForeigner(playersRegion.get(opponentID)) && globalConsistencyByPlayer.get(set.getWinnerId()) < this.getConsistencyScoreGlobalWithStackedFactor() * 0.8)
                             upsetFactorOnGlobalConsistencyPerformance = this.getConsistencyScoreGlobalWithStackedFactor() - globalConsistencyByPlayer.get(set.getWinnerId());
                         else
                             upsetFactorOnGlobalConsistencyPerformance = 0;
@@ -714,20 +767,30 @@ public class Player {
             }
             if (tournamentTypeMap.get(tournamentKey).equals("local") || tournamentTypeMap.get(tournamentKey).equals("regional"))
                 this.setWinLossImpactScoreRegionalsAndLocals(this.getWinLossImpactScoreRegionalsAndLocals() + (maxValue[0] + maxValue[1] + minValue[0] + minValue[1]) / 2f);
-            else
+            else if (tournamentTypeMap.get(tournamentKey).equals("national") || tournamentTypeMap.get(tournamentKey).equals("major")) {
+                tournamentPlacingScore.put(tournamentKey, (maxValue[0] + maxValue[1] + minValue[0] + minValue[1]) / 2f + this.getPlacingsByTournament().get(tournamentKey));
                 this.setWinLossImpactScoreNationalsAndMajors(this.getWinLossImpactScoreNationalsAndMajors() + (maxValue[0] + maxValue[1] + minValue[0] + minValue[1]) / 2f);
-
+            }
 
         }
-        if (getLocalCount() + getRegionalCount() > 0 && getNationalCount() + getMajorCount() > 0) {
-            this.setWinLossImpactScoreRegionalsAndLocals(this.getWinLossImpactScoreRegionalsAndLocals() / (getLocalCount() + getRegionalCount()));
+
+
+        if (tournamentPlacingScore.size() >= 3) {
+            Map.Entry<Integer, Float> min = Collections.min(tournamentPlacingScore.entrySet(),
+                    Map.Entry.comparingByValue());
+            this.setWinLossImpactScoreNationalsAndMajors(this.getWinLossImpactScoreNationalsAndMajors() - 1.3f * (min.getValue() - this.getPlacingsByTournament().get(min.getKey())));
+            this.setNationalCount(this.getNationalCount() - 1);
+        }
+
+        if (((this.isCountLocals()) ? getLocalCount() : 0f) + getRegionalCount() > 0 && getNationalCount() + getMajorCount() > 0) {
+            this.setWinLossImpactScoreRegionalsAndLocals(this.getWinLossImpactScoreRegionalsAndLocals() / (((this.isCountLocals()) ? getLocalCount() : 0f) + getRegionalCount()));
             this.setWinLossImpactScoreNationalsAndMajors(this.getWinLossImpactScoreNationalsAndMajors() / (getNationalCount() + getMajorCount()));
-            this.setWinLossImpactScore(this.getWinLossImpactScoreRegionalsAndLocals() * 0.75f + this.getWinLossImpactScoreNationalsAndMajors() * 1.75f);
+            this.setWinLossImpactScore(this.getWinLossImpactScoreRegionalsAndLocals() * 0.75f + this.getWinLossImpactScoreNationalsAndMajors() * 1.75f * ((getNationalCount() + getMajorCount() >= 2 || (isForeigner(getRegion()))) ? 1f : 4 / 5f));
         } else if (getNationalCount() + getMajorCount() > 0) {
             this.setWinLossImpactScoreNationalsAndMajors(this.getWinLossImpactScoreNationalsAndMajors() / (getNationalCount() + getMajorCount()));
             this.setWinLossImpactScore(this.getWinLossImpactScoreNationalsAndMajors() * 2.5f);
         } else {
-            this.setWinLossImpactScoreRegionalsAndLocals(this.getWinLossImpactScoreRegionalsAndLocals() / (getLocalCount() + getRegionalCount()));
+            this.setWinLossImpactScoreRegionalsAndLocals(this.getWinLossImpactScoreRegionalsAndLocals() / (((this.isCountLocals()) ? getLocalCount() : 0f) + getRegionalCount()));
             this.setWinLossImpactScore(this.getWinLossImpactScoreRegionalsAndLocals() * 1.75f);
         }
     }
@@ -759,20 +822,21 @@ public class Player {
         players.forEach(p -> p.setFinalRankingScore(p.getConsistencyScoreGlobalWithStackedFactor() * Constants.CONSISTENCY_COEFFICIENT + p.getWinLossImpactScore() * Constants.WIN_LOSS_IMPACT_COEFFICIENT));
         players.sort((o1, o2) -> Float.compare(o1.getFinalRankingScore(), o2.getFinalRankingScore()));
         Collections.reverse(players);
-        List<Player> top100 = players.stream().filter(p -> ((p.getRegion() < 14 || p.getRegion() == 35 || p.getRegion() == 36) && p.getTournaments().size() >= 4 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1) || (p.getRegion() > 13 && p.getRegion() != 35 && p.getRegion() != 36 && p.getTournaments().size() >= 6 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1)).limit(200).collect(Collectors.toList());
-
-
+        List<Player> top100 = players.stream().filter(p -> ((p.getRegion() < 14 || p.getRegion() == 35 || p.getRegion() == 36) && p.getTournaments().size() >= 4 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1) || (p.getRegion() > 13 && p.getRegion() != 35 && p.getRegion() != 36 && p.getTournaments().size() >= 6 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1))/*.limit(100)*/.collect(Collectors.toList());
+        System.out.println((int) players.stream().filter(p -> ((p.getRegion() < 14 || p.getRegion() == 35 || p.getRegion() == 36) && p.getTournaments().size() >= 4 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1) || (p.getRegion() > 13 && p.getRegion() != 35 && p.getRegion() != 36 && p.getTournaments().size() >= 6 && p.getRegionalCount() + p.getNationalCount() + p.getMajorCount() >= 1)).count());
         int i = 1;
-        int j = 1;
-        System.out.println("placing;name;local;regional;national;major;global;globalwithstackedfactor;winlossimpactscorelocalsandregionals;winlossimpactscorenationalsandmajors;winlossimpactscoreglobal;finalscore");
+
+        System.out.println("placing;name;local;regional;national;major;global;globalwithstackedfactor;winlossimpactscorelocalsandregionals;winlossimpactscorenationalsandmajors;winlossimpactscoreglobal;finalscore;hiddenboss");
+
         for (Player player : top100) {
-            // System.out.println(i++ + " : " + player.getName() + " : " + player.getFinalRankingScore());
-            if (player.getRegion() > 13 && player.getRegion() != 35 && player.getRegion() != 36)
-                System.out.println(i - 0.5f + ";" + player.toCSV());
+            //System.out.println(i++ + " : " + player.getName() + " : " + player.getFinalRankingScore());
+            if (isForeigner(player.getRegion()))
+                System.out.println(i - 0.5f + ";" + player.toCSV() + ";" + player.isHiddenBoss());
             else
-                System.out.println(i++ + ";" + player.toCSV());
-            j++;
+                System.out.println(i++ + ";" + player.toCSV() + ";" + player.isHiddenBoss());
+
         }
+
 
     }
 
@@ -804,8 +868,18 @@ public class Player {
 
     }
 
+    private HashMap<Integer, Integer> getPlayerRegionMap(List<Player> players) {
+        return (HashMap<Integer, Integer>) players.stream().collect(Collectors.toMap(Player::getPlayerID, Player::getRegion));
+
+    }
+
     private HashMap<Integer, String> getTournamentTypeMap(List<Tournament> tournaments) {
         return (HashMap<Integer, String>) tournaments.stream().collect(Collectors.toMap(Tournament::getTournamentID, Tournament::getType));
+    }
+
+    private HashMap<Integer, Boolean> getHiddenBossMap(List<Player> players) {
+        return (HashMap<Integer, Boolean>) players.stream().collect(Collectors.toMap(Player::getPlayerID, Player::isHiddenBoss));
+
     }
 
 
@@ -830,4 +904,14 @@ public class Player {
         return name + ";" + consistencyScoreLocal + ";" + consistencyScoreRegional + ";" + consistencyScoreNational + ";" + consistencyScoreMajor + ";" + consistencyScoreGlobal + ";" + consistencyScoreGlobalWithStackedFactor + ";" + winLossImpactScoreRegionalsAndLocals + ";" + winLossImpactScoreNationalsAndMajors + ";" + winLossImpactScore + ";" + finalRankingScore;
 
     }
+
+    public boolean isHiddenBoss() {
+        return hiddenBoss;
+    }
+
+    public void setHiddenBoss(boolean hiddenBoss) {
+        this.hiddenBoss = hiddenBoss;
+    }
+
+
 }
